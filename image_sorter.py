@@ -37,54 +37,126 @@ class ImageSorterApp:
     def __init__(self, root):
         """Initialize the application."""
         self.root = root
-        self.root.title("File Sorter")
-        self.root.geometry("850x700")
-        self.root.configure(bg='#2e2e2e')
-        self.root.minsize(500, 400)
+        self.root.title("Camera Roll Cleaner")
+        self.root.geometry("1100x800")
+        self.root.configure(bg='#0a0a0a')
+        self.root.minsize(800, 600)
 
         self.folder_path = ""
         self.image_files = []
         self.current_index = -1
         self.config_file = os.path.join(os.path.expanduser('~'), '.sorter_config')
 
+        # Modern color palette
+        self.colors = {
+            'bg': '#0a0a0a',
+            'surface': '#141414',
+            'surface_light': '#1e1e1e',
+            'accent': '#3b82f6',
+            'accent_hover': '#2563eb',
+            'text_primary': '#ffffff',
+            'text_secondary': '#a3a3a3',
+            'border': '#262626',
+            'danger': '#ef4444',
+            'danger_hover': '#dc2626'
+        }
+
         # --- UI Elements ---
-        # Main frame
-        main_frame = tk.Frame(root, bg='#2e2e2e')
-        main_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+        # Main container with padding
+        main_frame = tk.Frame(root, bg=self.colors['bg'])
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=40, pady=30)
 
-        # Top bar for the button
-        top_frame = tk.Frame(main_frame, bg='#2e2e2e')
-        top_frame.pack(fill=tk.X, pady=(0, 10))
+        # Header section
+        header_frame = tk.Frame(main_frame, bg=self.colors['bg'])
+        header_frame.pack(fill=tk.X, pady=(0, 30))
 
+        # App title
+        title_label = tk.Label(
+            header_frame,
+            text="Camera Roll Cleaner",
+            bg=self.colors['bg'],
+            fg=self.colors['text_primary'],
+            font=('SF Pro Display', 28, 'bold')
+        )
+        title_label.pack(side=tk.LEFT)
+
+        # Action buttons container
+        button_frame = tk.Frame(header_frame, bg=self.colors['bg'])
+        button_frame.pack(side=tk.RIGHT)
+
+        # Select folder button
         self.open_button = tk.Button(
-            top_frame,
+            button_frame,
             text="Select Folder",
             command=self.select_folder,
-            bg='#4a4a4a',
-            fg='white',
-            font=('Inter', 12),
+            bg=self.colors['accent'],
+            fg=self.colors['text_primary'],
+            font=('SF Pro Text', 13, 'bold'),
             relief=tk.FLAT,
-            padx=10,
-            pady=5
+            borderwidth=0,
+            padx=24,
+            pady=12,
+            cursor='hand2',
+            activebackground=self.colors['accent_hover'],
+            activeforeground=self.colors['text_primary']
         )
-        self.open_button.pack()
+        self.open_button.pack(side=tk.LEFT, padx=5)
+        self._add_hover_effect(self.open_button, self.colors['accent'], self.colors['accent_hover'])
+
+        # Image container with rounded effect
+        image_container = tk.Frame(main_frame, bg=self.colors['surface'], highlightthickness=1,
+                                   highlightbackground=self.colors['border'])
+        image_container.pack(pady=(0, 20), fill=tk.BOTH, expand=True)
 
         # Image display label
-        self.image_label = tk.Label(main_frame, bg='#2e2e2e')
-        self.image_label.pack(pady=10, fill=tk.BOTH, expand=True)
+        self.image_label = tk.Label(image_container, bg=self.colors['surface'])
+        self.image_label.pack(padx=2, pady=2, fill=tk.BOTH, expand=True)
 
-        # Bottom frame for instructions
-        instructions_frame = tk.Frame(main_frame, bg='#3a3a3a', padx=10, pady=10)
-        instructions_frame.pack(fill=tk.X, pady=(10, 0))
+        # File info bar
+        info_bar = tk.Frame(main_frame, bg=self.colors['surface_light'], highlightthickness=1,
+                           highlightbackground=self.colors['border'])
+        info_bar.pack(fill=tk.X, pady=(0, 15))
 
-        self.instructions_label = tk.Label(
-            instructions_frame,
-            text="", # Will be set dynamically
-            bg='#3a3a3a',
-            fg='white',
-            font=('Inter', 11)
+        info_content = tk.Frame(info_bar, bg=self.colors['surface_light'])
+        info_content.pack(padx=20, pady=15)
+
+        # File counter
+        self.file_counter_label = tk.Label(
+            info_content,
+            text="",
+            bg=self.colors['surface_light'],
+            fg=self.colors['text_secondary'],
+            font=('SF Pro Text', 12)
         )
-        self.instructions_label.pack()
+        self.file_counter_label.pack(side=tk.LEFT, padx=(0, 30))
+
+        # Filename display
+        self.filename_label = tk.Label(
+            info_content,
+            text="",
+            bg=self.colors['surface_light'],
+            fg=self.colors['text_primary'],
+            font=('SF Mono', 12)
+        )
+        self.filename_label.pack(side=tk.LEFT)
+
+        # Keyboard shortcuts panel
+        shortcuts_frame = tk.Frame(main_frame, bg=self.colors['surface'], highlightthickness=1,
+                                   highlightbackground=self.colors['border'])
+        shortcuts_frame.pack(fill=tk.X)
+
+        shortcuts_content = tk.Frame(shortcuts_frame, bg=self.colors['surface'])
+        shortcuts_content.pack(padx=20, pady=12)
+
+        self.shortcuts_label = tk.Label(
+            shortcuts_content,
+            text="",
+            bg=self.colors['surface'],
+            fg=self.colors['text_secondary'],
+            font=('SF Pro Text', 11),
+            justify=tk.CENTER
+        )
+        self.shortcuts_label.pack()
 
 
         # --- Keyboard Bindings ---
@@ -95,10 +167,15 @@ class ImageSorterApp:
         self.root.bind('<space>', self.play_video)
 
         # Initial message
-        self.show_message("Select a folder to start sorting.")
-        
+        self.show_message("Select a folder to start sorting")
+
         # Try to load the last used folder on startup
         self.root.after(100, self.load_last_folder) # Use 'after' to let the main window initialize
+
+    def _add_hover_effect(self, button, normal_color, hover_color):
+        """Add hover effect to a button."""
+        button.bind('<Enter>', lambda _: button.config(bg=hover_color))
+        button.bind('<Leave>', lambda _: button.config(bg=normal_color))
 
     def select_folder(self):
         """Open a dialog to select a folder."""
@@ -156,35 +233,73 @@ class ImageSorterApp:
         if success:
             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             image = Image.fromarray(frame_rgb)
+
+            # Add modern video overlay badge
+            draw = ImageDraw.Draw(image, 'RGBA')
+
+            # Badge dimensions
+            badge_width = 320
+            badge_height = 70
+            margin = 30
+            x = margin
+            y = margin
+
+            # Draw semi-transparent rounded rectangle background
+            overlay = Image.new('RGBA', image.size, (0, 0, 0, 0))
+            overlay_draw = ImageDraw.Draw(overlay)
+            overlay_draw.rounded_rectangle(
+                [(x, y), (x + badge_width, y + badge_height)],
+                radius=12,
+                fill=(20, 20, 20, 200)
+            )
+            image = Image.alpha_composite(image.convert('RGBA'), overlay)
             draw = ImageDraw.Draw(image)
+
+            # Add play icon and text
             try:
-                font = ImageFont.load_default(size=24)
+                font_large = ImageFont.load_default(size=20)
+                font_small = ImageFont.load_default(size=14)
             except AttributeError:
-                 font = ImageFont.load_default()
-            draw.text((10, 10), "VIDEO (Press Spacebar to play)", fill="white", font=font,
-                      stroke_width=2, stroke_fill="black")
-            return image
+                font_large = ImageFont.load_default()
+                font_small = ImageFont.load_default()
+
+            # Play icon (triangle)
+            icon_x = x + 20
+            icon_y = y + badge_height // 2
+            triangle = [(icon_x, icon_y - 12), (icon_x, icon_y + 12), (icon_x + 16, icon_y)]
+            draw.polygon(triangle, fill='#3b82f6')
+
+            # Text
+            text_x = icon_x + 30
+            draw.text((text_x, y + 14), "VIDEO", fill='white', font=font_large)
+            draw.text((text_x, y + 38), "Press Space to play", fill='#a3a3a3', font=font_small)
+
+            return image.convert('RGB')
         return None
 
     def display_image(self):
         """Load and display the current file's preview."""
         if self.current_index < 0 or self.current_index >= len(self.image_files):
-            self.show_message("All files have been deleted or the folder is empty.")
+            self.show_message("All files have been deleted or the folder is empty")
             return
 
         try:
             filename = self.image_files[self.current_index]
             file_path = os.path.join(self.folder_path, filename)
             image = None
-            
+
             is_video = filename.lower().endswith('.mov')
-            
-            # Update instructions based on file type
-            base_instructions = "← Previous | → Next | [Delete] or [d] Delete File"
+
+            # Update file info
+            self.file_counter_label.config(text=f"{self.current_index + 1} / {len(self.image_files)}")
+            self.filename_label.config(text=filename)
+
+            # Update keyboard shortcuts based on file type
             if is_video:
-                self.instructions_label.config(text=f"{base_instructions} | [Spacebar] Play Video")
+                shortcuts_text = "← Previous  •  → Next  •  Space Play Video  •  Delete Remove"
             else:
-                self.instructions_label.config(text=base_instructions)
+                shortcuts_text = "← Previous  •  → Next  •  Delete Remove"
+            self.shortcuts_label.config(text=shortcuts_text)
 
             if is_video:
                 image = self.get_video_thumbnail(file_path)
@@ -198,7 +313,7 @@ class ImageSorterApp:
             self.root.update_idletasks()
             container_width = self.image_label.winfo_width()
             container_height = self.image_label.winfo_height()
-            
+
             if container_width <= 1 or container_height <= 1:
                 return
 
@@ -208,25 +323,28 @@ class ImageSorterApp:
             self.image_label.config(image=photo, text="")
             self.image_label.image = photo
 
-            self.root.title(f"File Sorter ({self.current_index + 1}/{len(self.image_files)}) - {filename}")
+            self.root.title(f"Camera Roll Cleaner ({self.current_index + 1}/{len(self.image_files)})")
 
         except Exception as e:
             error_message = f"Error loading file: {self.image_files[self.current_index]}\n\n{e}"
-            self.image_label.config(image=None, text=error_message, fg='red')
+            self.image_label.config(image=None, text=error_message, fg=self.colors['danger'],
+                                   font=('SF Pro Text', 13))
             self.image_label.image = None
 
     def show_message(self, message):
         """Display a message in the image label area."""
-        self.instructions_label.config(text="← Previous | → Next | [Delete] or [d] Delete File")
+        self.shortcuts_label.config(text="← Previous  •  → Next  •  Delete Remove")
+        self.file_counter_label.config(text="")
+        self.filename_label.config(text="")
         self.image_label.config(
             image=None,
             text=message,
-            fg='white',
-            bg='#2e2e2e',
-            font=('Inter', 14)
+            fg=self.colors['text_secondary'],
+            bg=self.colors['surface'],
+            font=('SF Pro Text', 16)
         )
         self.image_label.image = None
-        self.root.title("File Sorter")
+        self.root.title("Camera Roll Cleaner")
 
     def show_next_image(self, event=None):
         """Navigate to the next file."""
