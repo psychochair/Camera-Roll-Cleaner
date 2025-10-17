@@ -19,6 +19,7 @@
 # pip install Pillow pillow-heif opencv-python pygame
 
 import os
+import shutil
 import tkinter as tk
 from tkinter import filedialog, messagebox
 from PIL import Image, ImageTk, ImageDraw, ImageFont
@@ -104,12 +105,12 @@ class ImageSorterApp:
         self._add_hover_effect(self.open_button, self.colors['accent'], self.colors['accent_hover'])
 
         # Image container with rounded effect
-        image_container = tk.Frame(main_frame, bg=self.colors['surface'], highlightthickness=1,
+        self.image_container = tk.Frame(main_frame, bg=self.colors['surface'], highlightthickness=1,
                                    highlightbackground=self.colors['border'])
-        image_container.pack(pady=(0, 20), fill=tk.BOTH, expand=True)
+        self.image_container.pack(pady=(0, 20), fill=tk.BOTH, expand=True)
 
         # Image display label
-        self.image_label = tk.Label(image_container, bg=self.colors['surface'])
+        self.image_label = tk.Label(self.image_container, bg=self.colors['surface'])
         self.image_label.pack(padx=2, pady=2, fill=tk.BOTH, expand=True)
 
         # File info bar
@@ -165,6 +166,7 @@ class ImageSorterApp:
         self.root.bind('<Delete>', self.delete_current_image)
         self.root.bind('<d>', self.delete_current_image)
         self.root.bind('<space>', self.play_video)
+        self.root.bind('<f>', self.add_to_favorites)
 
         # Initial message
         self.show_message("Select a folder to start sorting")
@@ -292,13 +294,18 @@ class ImageSorterApp:
 
             # Update file info
             self.file_counter_label.config(text=f"{self.current_index + 1} / {len(self.image_files)}")
-            self.filename_label.config(text=filename)
+
+            # Show favorite indicator in filename
+            if self.is_favorited(filename):
+                self.filename_label.config(text=f"⭐ {filename}")
+            else:
+                self.filename_label.config(text=filename)
 
             # Update keyboard shortcuts based on file type
             if is_video:
-                shortcuts_text = "← Previous  •  → Next  •  Space Play Video  •  Delete Remove"
+                shortcuts_text = "← Previous  •  → Next  •  Space Play Video  •  F Toggle Favorite  •  Delete Remove"
             else:
-                shortcuts_text = "← Previous  •  → Next  •  Delete Remove"
+                shortcuts_text = "← Previous  •  → Next  •  F Toggle Favorite  •  Delete Remove"
             self.shortcuts_label.config(text=shortcuts_text)
 
             if is_video:
@@ -310,14 +317,32 @@ class ImageSorterApp:
                 if image.mode == 'RGBA':
                     image = image.convert('RGB')
 
-            self.root.update_idletasks()
-            container_width = self.image_label.winfo_width()
-            container_height = self.image_label.winfo_height()
+            # Get container dimensions (use parent container for stable size)
+            container_width = self.image_container.winfo_width()
+            container_height = self.image_container.winfo_height()
 
+            # Ensure dimensions are valid
             if container_width <= 1 or container_height <= 1:
-                return
+                # Use default values on first load
+                container_width = 1000
+                container_height = 600
 
-            image.thumbnail((container_width, container_height), Image.Resampling.LANCZOS)
+            # Calculate aspect ratio preserving size
+            img_width, img_height = image.size
+            aspect_ratio = img_width / img_height
+            container_aspect = container_width / container_height
+
+            if aspect_ratio > container_aspect:
+                # Image is wider than container
+                new_width = container_width - 20  # Padding
+                new_height = int(new_width / aspect_ratio)
+            else:
+                # Image is taller than container
+                new_height = container_height - 20  # Padding
+                new_width = int(new_height * aspect_ratio)
+
+            # Resize image with calculated dimensions
+            image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
 
             photo = ImageTk.PhotoImage(image)
             self.image_label.config(image=photo, text="")
@@ -333,7 +358,7 @@ class ImageSorterApp:
 
     def show_message(self, message):
         """Display a message in the image label area."""
-        self.shortcuts_label.config(text="← Previous  •  → Next  •  Delete Remove")
+        self.shortcuts_label.config(text="← Previous  •  → Next  •  F Toggle Favorite  •  Delete Remove")
         self.file_counter_label.config(text="")
         self.filename_label.config(text="")
         self.image_label.config(
@@ -444,6 +469,78 @@ class ImageSorterApp:
 
         except Exception as e:
             messagebox.showerror("Playback Error", f"An error occurred while playing the video:\n\n{e}")
+
+    def is_favorited(self, filename):
+        """Check if a file is in the favorites folder."""
+        favorites_folder = os.path.join(self.folder_path, "favorites")
+        destination_path = os.path.join(favorites_folder, filename)
+        return os.path.exists(destination_path)
+
+    def add_to_favorites(self, event=None):
+        """Toggle the current file in/out of the favorites subfolder."""
+        if self.current_index == -1 or not self.image_files:
+            messagebox.showwarning("No File", "There is no file to favorite.")
+            return
+
+        filename = self.image_files[self.current_index]
+        source_path = os.path.join(self.folder_path, filename)
+
+        # Create favorites subfolder if it doesn't exist
+        favorites_folder = os.path.join(self.folder_path, "favorites")
+        destination_path = os.path.join(favorites_folder, filename)
+
+        try:
+            # Check if already favorited
+            if self.is_favorited(filename):
+                # Remove from favorites
+                os.remove(destination_path)
+                print(f"Removed from favorites: {destination_path}")
+                self.show_temporary_message("☆ Removed from favorites", 1500)
+            else:
+                # Add to favorites
+                os.makedirs(favorites_folder, exist_ok=True)
+                shutil.copy2(source_path, destination_path)
+                print(f"Added to favorites: {destination_path}")
+                self.show_temporary_message("⭐ Added to favorites!", 1500)
+
+            # Update display to reflect favorite status
+            self.update_favorite_indicator()
+
+        except Exception as e:
+            messagebox.showerror("Error", f"Could not toggle favorite.\n\n{e}")
+
+    def update_favorite_indicator(self):
+        """Update the filename display to show favorite status."""
+        if self.current_index == -1 or not self.image_files:
+            return
+
+        filename = self.image_files[self.current_index]
+        if self.is_favorited(filename):
+            self.filename_label.config(text=f"⭐ {filename}")
+        else:
+            self.filename_label.config(text=filename)
+
+    def show_temporary_message(self, message, duration_ms):
+        """Show a temporary overlay message on the image."""
+        # Create a semi-transparent overlay
+        if hasattr(self.image_label, 'image') and self.image_label.image:
+            # Save current image
+            saved_image = self.image_label.image
+
+            # Create overlay label
+            overlay = tk.Label(
+                self.image_label,
+                text=message,
+                bg=self.colors['accent'],
+                fg=self.colors['text_primary'],
+                font=('SF Pro Text', 16, 'bold'),
+                padx=30,
+                pady=15
+            )
+            overlay.place(relx=0.5, rely=0.5, anchor='center')
+
+            # Remove overlay after duration
+            self.root.after(duration_ms, overlay.destroy)
 
     def delete_current_image(self, event=None):
         """Delete the currently displayed file."""
